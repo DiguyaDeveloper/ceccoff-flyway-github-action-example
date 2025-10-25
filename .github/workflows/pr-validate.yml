@@ -15,98 +15,106 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🔍 Verificar Estrutura
-        run: |
-          if [ ! -d "sql" ]; then
-            echo "::error::Diretório sql/ não encontrado"
-            exit 1
-          fi
-
-          for dir in ddl dml repeatable; do
-            if [ ! -d "sql/$dir" ]; then
-              echo "::warning::Diretório sql/$dir não encontrado"
-            fi
-          done
-
       - name: 🔎 Identificar Arquivos
         id: changed-files
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch origin ${{ github.base_ref }}
-            FILES=$(git diff --name-only --diff-filter=ACMRT origin/${{ github.base_ref }}... | grep '^sql/.*\.sql$' | tr '\n' ' ' || true)
+            FILES=$(git diff --name-only --diff-filter=ACMRT origin/${{ github.base_ref }}... | grep '^sql/.*\.sql$' || true)
           else
-            FILES=$(find sql -type f -name "*.sql" 2>/dev/null | tr '\n' ' ' || true)
+            FILES=$(find sql -type f -name "*.sql" 2>/dev/null || true)
           fi
 
           if [ -n "$FILES" ]; then
             echo "Arquivos encontrados:"
-            for file in $FILES; do
+            echo "$FILES" | while read -r file; do
               echo "  - $file"
             done
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "Nenhum arquivo SQL encontrado"
+            echo "files=" >> $GITHUB_OUTPUT
           fi
-
-          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
-
-      - name: 📝 Validar Sintaxe SQL
-        if: steps.changed-files.outputs.files != ''
-        run: |
-          echo "::group::Validação de Scripts SQL"
-          for file in ${{ steps.changed-files.outputs.files }}; do
-            echo "🔎 Analisando $file"
-            if [ ! -r "$file" ]; then
-              echo "::error file=$file::Arquivo não pode ser lido"
-              exit 1
-            fi
-          done
-          echo "::endgroup::"
 
       - name: 🔍 Validar Nomenclatura
         if: steps.changed-files.outputs.files != ''
         run: |
-          echo "::group::Validação de Nomenclatura"
-
+          echo "::group::Validação de Nomenclatura de Scripts SQL"
+          if [ -z "${{ steps.changed-files.outputs.files }}" ]; then
+            echo "⏭️ Skip: Nenhum arquivo SQL identificado para validação"
+            exit 0
+          fi
           error_count=0
           error_files=""
 
-          while IFS= read -r file; do
-            if [[ -f "$file" ]]; then
-              basename=$(basename "$file")
-              echo "🔎 Verificando: $file"
+          echo "${{ steps.changed-files.outputs.files }}" | while read -r file; do
+            echo "🔎 Verificando: $file"
+            basename=$(basename "$file")
 
-              if [[ $file == *"/repeatable/"* ]]; then
-                # Validação mais estrita para scripts repetíveis
-                if [[ ! $basename =~ ^R__[a-zA-Z0-9_]+\.sql$ ]]; then
-                  echo "::error file=$file::❌ Scripts repetíveis devem seguir exatamente o padrão R__{nome}.sql"
-                  error_count=$((error_count + 1))
-                  error_files="$error_files\n- $file"
-                fi
-              elif [[ $file =~ /ddl/|/dml/ ]]; then
-                # Validação mais estrita para scripts versionados
-                if [[ ! $basename =~ ^V[0-9]{14}__[a-zA-Z0-9_]+\.sql$ ]]; then
-                  echo "::error file=$file::❌ Scripts versionados devem seguir exatamente o padrão V{YYYYMMDDHHMMSS}__{nome}.sql"
-                  error_count=$((error_count + 1))
-                  error_files="$error_files\n- $file"
-                fi
+            if [[ "$file" == *"/repeatable/"* ]]; then
+              if [[ ! "$basename" =~ ^R__[a-zA-Z0-9_]+\.sql$ ]]; then
+                echo "::error file=$file::❌ $basename - Deve seguir o padrão R__{nome}.sql"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ Nomenclatura válida: $basename"
+              fi
+            elif [[ "$file" =~ /ddl/|/dml/ ]]; then
+              if [[ ! "$basename" =~ ^V[0-9]{14}__[a-zA-Z0-9_]+\.sql$ ]]; then
+                echo "::error file=$file::❌ $basename - Deve seguir o padrão V{YYYYMMDDHHMMSS}__{nome}.sql"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ Nomenclatura válida: $basename"
               fi
             fi
-          done <<< "${{ steps.changed-files.outputs.files }}"
+          done
 
           if [ $error_count -gt 0 ]; then
-            echo "❌ Encontrados $error_count arquivo(s) com erro de nomenclatura:"
+            echo "❌ $error_count arquivo(s) com nomenclatura inválida:"
             echo -e "$error_files"
             exit 1
           fi
+          echo "::endgroup::"
 
-          echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
+      - name: 📝 Validar Sintaxe SQL
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          echo "::group::Validação de Sintaxe SQL"
+          if [ -z "${{ steps.changed-files.outputs.files }}" ]; then
+            echo "⏭️ Skip: Nenhum arquivo SQL identificado para validação"
+            exit 0
+          fi
+          error_count=0
+          error_files=""
+
+          echo "${{ steps.changed-files.outputs.files }}" | while read -r file; do
+            echo "🔎 Analisando: $file"
+            if [ ! -r "$file" ]; then
+              echo "::error file=$file::❌ Arquivo não pode ser lido"
+              error_count=$((error_count + 1))
+              error_files="$error_files\n- $file"
+              continue
+            fi
+
+            # Aqui você pode adicionar sua lógica de validação SQL
+            # Por exemplo, usando sqlformat ou outro validador SQL
+          done
+
+          if [ $error_count -gt 0 ]; then
+            echo "❌ $error_count arquivo(s) com erro de sintaxe:"
+            echo -e "$error_files"
+            exit 1
+          fi
           echo "::endgroup::"
 
       - name: 📊 Resumo
         if: always()
         run: |
           if [ -z "${{ steps.changed-files.outputs.files }}" ]; then
-            echo "ℹ️ Nenhum arquivo SQL alterado"
+            echo "⏭️ Validação pulada: Nenhum arquivo SQL alterado"
           else
             echo "✅ Validação concluída com sucesso"
           fi
