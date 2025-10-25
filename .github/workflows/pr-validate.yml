@@ -32,15 +32,22 @@ jobs:
         id: changed-files
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            FILES=$(git diff --name-only origin/${{ github.base_ref }}... | grep '^sql/.*\.sql$' || true)
-          elif [ -n "${{ inputs.pr_number }}" ]; then
-            git fetch origin pull/${{ inputs.pr_number }}/head:pr-${{ inputs.pr_number }}
-            git checkout pr-${{ inputs.pr_number }}
-            FILES=$(git diff --name-only origin/main... | grep '^sql/.*\.sql$' || true)
+            # Busca arquivos alterados no PR atual
+            git fetch origin ${{ github.base_ref }}
+            FILES=$(git diff --name-only --diff-filter=ACMRT origin/${{ github.base_ref }}... | grep '^sql/.*\.sql$' || true)
           else
-            FILES=$(find sql -type f -name "*.sql")
+            # Quando executado manualmente, verifica todos os arquivos
+            FILES=$(find sql -type f -name "*.sql" 2>/dev/null || true)
           fi
-          echo "files=${FILES}" >> $GITHUB_OUTPUT
+
+          if [ -n "$FILES" ]; then
+            echo "Arquivos encontrados:"
+            echo "$FILES" | sed 's/^/  - /'
+          else
+            echo "Nenhum arquivo SQL encontrado"
+          fi
+
+          echo "files=$FILES" >> $GITHUB_OUTPUT
 
       - name: 📝 Validar Sintaxe SQL
         if: steps.changed-files.outputs.files != ''
