@@ -75,16 +75,20 @@ jobs:
               basename=$(basename "$file")
               echo "🔎 Verificando: $file"
 
-              if [[ $file == sql/repeatable/* ]] && [[ ! $basename =~ ^R__ ]]; then
-                echo "::error file=$file::❌ $basename - Não segue o padrão R__"
-                error_count=$((error_count + 1))
-                error_files="$error_files\n- $file"
-              elif [[ $file =~ sql/(ddl|dml)/* ]] && [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
-                echo "::error file=$file::❌ $basename - Não segue o padrão V{YYYYMMDDHHMMSS}__"
-                error_count=$((error_count + 1))
-                error_files="$error_files\n- $file"
-              else
-                echo "✅ $basename - OK"
+              if [[ $file == *"/repeatable/"* ]]; then
+                # Validação mais estrita para scripts repetíveis
+                if [[ ! $basename =~ ^R__[a-zA-Z0-9_]+\.sql$ ]]; then
+                  echo "::error file=$file::❌ Scripts repetíveis devem seguir exatamente o padrão R__{nome}.sql"
+                  error_count=$((error_count + 1))
+                  error_files="$error_files\n- $file"
+                fi
+              elif [[ $file =~ /ddl/|/dml/ ]]; then
+                # Validação mais estrita para scripts versionados
+                if [[ ! $basename =~ ^V[0-9]{14}__[a-zA-Z0-9_]+\.sql$ ]]; then
+                  echo "::error file=$file::❌ Scripts versionados devem seguir exatamente o padrão V{YYYYMMDDHHMMSS}__{nome}.sql"
+                  error_count=$((error_count + 1))
+                  error_files="$error_files\n- $file"
+                fi
               fi
             fi
           done <<< "${{ steps.changed-files.outputs.files }}"
