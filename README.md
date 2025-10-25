@@ -45,4 +45,3 @@
 - Use `CREATE OR REPLACE` em scripts repetíveis
 - Mantenha scripts idempotentes
 - Documente alterações complexas
-# ceccoff-flyway-github-action-example
