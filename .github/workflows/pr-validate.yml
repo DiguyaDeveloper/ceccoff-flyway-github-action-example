@@ -1,0 +1,64 @@
+name: 🔍 SQL Validation
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ "sql/**" ]
+
+jobs:
+  validate-changes:
+    name: 📝 Validar Alterações SQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔎 Identificar Arquivos Alterados
+        id: changed-files
+        run: |
+          echo "files=$(git diff --name-only origin/main... | grep '^sql/.*\.sql$' | xargs)" >> $GITHUB_OUTPUT
+
+      - name: 📋 Validar Nomenclatura
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          echo "::group::Validação de Nomenclatura"
+          for file in ${{ steps.changed-files.outputs.files }}; do
+            echo "🔍 Verificando $file"
+
+            if [[ $file == sql/repeatable/* ]] && [[ ! $file =~ ^sql/repeatable/R__ ]]; then
+              echo "::error::❌ Scripts repetíveis devem começar com R__"
+              exit 1
+            fi
+
+            if [[ $file =~ sql/(ddl|dml)/* ]] && [[ ! $file =~ ^sql/(ddl|dml)/V[0-9]{14}__ ]]; then
+              echo "::error::❌ Scripts versionados devem seguir o padrão V{YYYYMMDDHHMMSS}__"
+              exit 1
+            fi
+
+            echo "✅ Nomenclatura válida"
+          done
+          echo "::endgroup::"
+
+      - name: 🔍 Validar Sintaxe SQL
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          echo "::group::Validação de Sintaxe SQL"
+          for file in ${{ steps.changed-files.outputs.files }}; do
+            echo "📝 Analisando $file..."
+            if ! sqlformat --verify "$file"; then
+              echo "::error::❌ Erro de sintaxe em $file"
+              exit 1
+            fi
+            echo "✅ Sintaxe válida"
+          done
+          echo "::endgroup::"
+
+      - name: 📊 Resumo
+        if: always()
+        run: |
+          if [ "${{ steps.changed-files.outputs.files }}" == "" ]; then
+            echo "ℹ️ Nenhum arquivo SQL alterado"
+          else
+            echo "✅ Validação concluída com sucesso"
+          fi

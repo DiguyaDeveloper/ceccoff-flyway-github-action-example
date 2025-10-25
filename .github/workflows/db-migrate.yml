@@ -1,0 +1,117 @@
+name: 🗄️ Database Migration Workflow
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ "sql/**" ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '🌍 Selecione o Ambiente'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, hml, prod]
+      command:
+        description: '⚡ Comando Flyway'
+        required: true
+        default: 'migrate'
+        type: choice
+        options: [info, validate, migrate, repair]
+
+env:
+  FLYWAY_VERSION: 10.18.2
+  FLYWAY_SCHEMAS: scheduler
+  FLYWAY_DEFAULT_SCHEMA: scheduler
+
+jobs:
+  validate:
+    name: 🔍 Validação de Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 📝 Verificar Sintaxe SQL
+        run: |
+          echo "::group::Validação de Scripts SQL"
+          for file in sql/**/*.sql; do
+            echo "🔎 Analisando $file..."
+            if ! sqlformat --verify "$file"; then
+              echo "::error::❌ Erro de sintaxe em $file"
+              exit 1
+            fi
+            echo "✅ $file válido"
+          done
+          echo "::endgroup::"
+
+  approval:
+    name: ✋ Aprovação Manual
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    if: inputs.environment != 'dev'
+    steps:
+      - run: echo "✅ Migração aprovada para ${{ inputs.environment }}"
+
+  migrate:
+    name: 🚀 Execução da Migração
+    needs: [validate, approval]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+
+    concurrency:
+      group: flyway-${{ inputs.environment || 'dev' }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Variáveis
+        run: |
+          echo "FLYWAY_URL=${{ secrets.DB_URL }}" >> $GITHUB_ENV
+          echo "FLYWAY_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+          echo "FLYWAY_PASSWORD=${{ secrets.DB_PASS }}" >> $GITHUB_ENV
+
+      - name: 📊 Info Pré-Migração
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            info
+
+      - name: ⚡ Executar Flyway
+        id: migrate
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            ${{ inputs.command || 'migrate' }}
+
+      - name: 📈 Info Pós-Migração
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            info
+
+      - name: 📣 Notificar Status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const notify = require('./.github/scripts/notify.js');
+            await notify({
+              github,
+              context,
+              status: "${{ job.status }}",
+              environment: "${{ inputs.environment || 'dev' }}",
+              command: "${{ inputs.command || 'migrate' }}"
+            });
