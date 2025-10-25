@@ -28,18 +28,48 @@ jobs:
   validate:
     name: 🔍 Validação de Scripts
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🔍 Validar Scripts SQL
+      - name: 🏗️ Build Validator
         run: |
-          echo "::group::Validação de Scripts SQL"
-          docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
-            -e FLYWAY_VALIDATE_MIGRATION_NAMING=true \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            validate
+          docker build -t sql-validator -f docker/Dockerfile.validator .
+
+      - name: 📝 Validar Sintaxe SQL
+        run: |
+          echo "::group::Validação de Sintaxe SQL"
+          for dir in ddl dml repeatable; do
+            if [ -d "sql/$dir" ]; then
+              echo "🔍 Verificando scripts em sql/$dir"
+              docker run --rm -v "${{ github.workspace }}/sql:/scripts" \
+                sql-validator lint "/$dir/*.sql" \
+                --format github-annotation
+            fi
+          done
+          echo "::endgroup::"
+
+      - name: 🔍 Validar Nomenclatura
+        run: |
+          echo "::group::Validação de Nomenclatura"
+          for file in sql/ddl/*.sql sql/dml/*.sql; do
+            if [[ -f "$file" ]]; then
+              basename=$(basename "$file")
+              if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
+                echo "::error file=$file::Arquivo não segue o padrão V{YYYYMMDDHHMMSS}__"
+                exit 1
+              fi
+            fi
+          done
+
+          for file in sql/repeatable/*.sql; do
+            if [[ -f "$file" ]]; then
+              basename=$(basename "$file")
+              if [[ ! $basename =~ ^R__ ]]; then
+                echo "::error file=$file::Arquivo não segue o padrão R__"
+                exit 1
+              fi
+            fi
+          done
           echo "::endgroup::"
 
   approval:
