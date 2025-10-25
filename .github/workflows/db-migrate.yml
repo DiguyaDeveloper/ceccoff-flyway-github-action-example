@@ -32,22 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🔧 Instalar dependências
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-sqlparse
-
-      - name: 📝 Verificar Sintaxe SQL
+      - name: 🔍 Validar Scripts SQL
         run: |
           echo "::group::Validação de Scripts SQL"
-          for file in sql/**/*.sql; do
-            echo "🔎 Analisando $file..."
-            if ! sqlformat --verify "$file"; then
-              echo "::error::❌ Erro de sintaxe em $file"
-              exit 1
-            fi
-            echo "✅ $file válido"
-          done
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_VALIDATE_MIGRATION_NAMING=true \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            validate
           echo "::endgroup::"
 
   approval:
