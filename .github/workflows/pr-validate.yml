@@ -39,13 +39,15 @@ jobs:
           fi
 
       - name: 🔍 Validar Nomenclatura
-        if: steps.changed-files.outputs.files != ''
         run: |
           echo "::group::Validação de Nomenclatura de Scripts SQL"
-          if [ -z "${{ steps.changed-files.outputs.files }}" ]; then
-            echo "⏭️ Skip: Nenhum arquivo SQL identificado para validação"
+          FILES="${{ steps.changed-files.outputs.files }}"
+
+          if [ -z "$FILES" ]; then
+            echo "⏭️ Skip: Nenhum arquivo SQL para validar"
             exit 0
           fi
+
           error_count=0
           error_files=""
 
@@ -80,13 +82,15 @@ jobs:
           echo "::endgroup::"
 
       - name: 📝 Validar Sintaxe SQL
-        if: steps.changed-files.outputs.files != ''
         run: |
           echo "::group::Validação de Sintaxe SQL"
-          if [ -z "${{ steps.changed-files.outputs.files }}" ]; then
-            echo "⏭️ Skip: Nenhum arquivo SQL identificado para validação"
+          FILES="${{ steps.changed-files.outputs.files }}"
+
+          if [ -z "$FILES" ]; then
+            echo "⏭️ Skip: Nenhum arquivo SQL para validar"
             exit 0
           fi
+
           error_count=0
           error_files=""
 
@@ -113,8 +117,9 @@ jobs:
       - name: 📊 Resumo
         if: always()
         run: |
-          if [ -z "${{ steps.changed-files.outputs.files }}" ]; then
-            echo "⏭️ Validação pulada: Nenhum arquivo SQL alterado"
+          FILES="${{ steps.changed-files.outputs.files }}"
+          if [ -z "$FILES" ]; then
+            echo "⏭️ Validação não necessária: Nenhum arquivo SQL alterado"
           else
             echo "✅ Validação concluída com sucesso"
           fi
