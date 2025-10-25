@@ -32,6 +32,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 🔧 Instalar dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-sqlparse
+
       - name: 📝 Verificar Sintaxe SQL
         run: |
           echo "::group::Validação de Scripts SQL"
