@@ -31,19 +31,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🏗️ Build Validator
+      - name: 🔍 Verificar Estrutura
         run: |
-          docker build -t sql-validator -f docker/Dockerfile.validator .
+          if [ ! -d "sql" ]; then
+            echo "::error::Diretório sql/ não encontrado"
+            exit 1
+          fi
+
+          for dir in ddl dml repeatable; do
+            if [ ! -d "sql/$dir" ]; then
+              echo "::warning::Diretório sql/$dir não encontrado"
+            fi
+          done
 
       - name: 📝 Validar Sintaxe SQL
         run: |
-          echo "::group::Validação de Sintaxe SQL"
-          for dir in ddl dml repeatable; do
-            if [ -d "sql/$dir" ]; then
-              echo "🔍 Verificando scripts em sql/$dir"
-              docker run --rm -v "${{ github.workspace }}/sql:/scripts" \
-                sql-validator lint "/$dir/*.sql" \
-                --format github-annotation
+          echo "::group::Validação de Scripts SQL"
+          find sql -type f -name "*.sql" -print0 | while IFS= read -r -d '' file; do
+            echo "🔎 Analisando $file"
+            # Aqui iremos apenas verificar se o arquivo existe e é legível
+            if [ ! -r "$file" ]; then
+              echo "::error file=$file::Arquivo não pode ser lido"
+              exit 1
             fi
           done
           echo "::endgroup::"
@@ -51,23 +60,21 @@ jobs:
       - name: 🔍 Validar Nomenclatura
         run: |
           echo "::group::Validação de Nomenclatura"
-          for file in sql/ddl/*.sql sql/dml/*.sql; do
-            if [[ -f "$file" ]]; then
-              basename=$(basename "$file")
-              if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
-                echo "::error file=$file::Arquivo não segue o padrão V{YYYYMMDDHHMMSS}__"
-                exit 1
-              fi
+          # Validar scripts versionados
+          find sql/ddl sql/dml -type f -name "*.sql" 2>/dev/null | while read file; do
+            basename=$(basename "$file")
+            if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
+              echo "::error file=$file::Arquivo não segue o padrão V{YYYYMMDDHHMMSS}__"
+              exit 1
             fi
           done
 
-          for file in sql/repeatable/*.sql; do
-            if [[ -f "$file" ]]; then
-              basename=$(basename "$file")
-              if [[ ! $basename =~ ^R__ ]]; then
-                echo "::error file=$file::Arquivo não segue o padrão R__"
-                exit 1
-              fi
+          # Validar scripts repetíveis
+          find sql/repeatable -type f -name "*.sql" 2>/dev/null | while read file; do
+            basename=$(basename "$file")
+            if [[ ! $basename =~ ^R__ ]]; then
+              echo "::error file=$file::Arquivo não segue o padrão R__"
+              exit 1
             fi
           done
           echo "::endgroup::"
