@@ -1,0 +1,6 @@
+CREATE OR REPLACE FUNCTION hello_world()
+RETURNS TEXT AS $$
+BEGIN
+    RETUR 'Hello World';
+END;
+$$ LANGUAGE plpgsql;
