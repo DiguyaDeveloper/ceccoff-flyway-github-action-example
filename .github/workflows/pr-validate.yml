@@ -81,6 +81,11 @@ jobs:
           fi
           echo "::endgroup::"
 
+      - name: 🔧 Instalar SQLFluff
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          pip install sqlfluff==2.3.5
+
       - name: 📝 Validar Sintaxe SQL
         run: |
           echo "::group::Validação de Sintaxe SQL"
@@ -94,17 +99,15 @@ jobs:
           error_count=0
           error_files=""
 
-          echo "${{ steps.changed-files.outputs.files }}" | while read -r file; do
+          echo "$FILES" | while read -r file; do
             echo "🔎 Analisando: $file"
-            if [ ! -r "$file" ]; then
-              echo "::error file=$file::❌ Arquivo não pode ser lido"
+            if ! sqlfluff lint "$file" --dialect postgres; then
+              echo "::error file=$file::❌ Erro de sintaxe SQL"
               error_count=$((error_count + 1))
               error_files="$error_files\n- $file"
-              continue
+            else
+              echo "✅ Sintaxe SQL válida: $file"
             fi
-
-            # Aqui você pode adicionar sua lógica de validação SQL
-            # Por exemplo, usando sqlformat ou outro validador SQL
           done
 
           if [ $error_count -gt 0 ]; then
@@ -122,4 +125,3 @@ jobs:
             echo "⏭️ Validação não necessária: Nenhum arquivo SQL alterado"
           else
             echo "✅ Validação concluída com sucesso"
-          fi
