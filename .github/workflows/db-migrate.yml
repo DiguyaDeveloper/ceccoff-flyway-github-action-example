@@ -60,23 +60,49 @@ jobs:
       - name: 🔍 Validar Nomenclatura
         run: |
           echo "::group::Validação de Nomenclatura"
+
+          error_count=0
+          error_files=""
+
           # Validar scripts versionados
-          find sql/ddl sql/dml -type f -name "*.sql" 2>/dev/null | while read file; do
-            basename=$(basename "$file")
-            if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
-              echo "::error file=$file::Arquivo não segue o padrão V{YYYYMMDDHHMMSS}__"
-              exit 1
+          while IFS= read -r file; do
+            if [[ -f "$file" ]]; then
+              basename=$(basename "$file")
+              echo "🔎 Verificando: $file"
+
+              if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
+                echo "::error file=$file::❌ $basename - Não segue o padrão V{YYYYMMDDHHMMSS}__"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ $basename - OK"
+              fi
             fi
-          done
+          done < <(find sql/ddl sql/dml -type f -name "*.sql" 2>/dev/null)
 
           # Validar scripts repetíveis
-          find sql/repeatable -type f -name "*.sql" 2>/dev/null | while read file; do
-            basename=$(basename "$file")
-            if [[ ! $basename =~ ^R__ ]]; then
-              echo "::error file=$file::Arquivo não segue o padrão R__"
-              exit 1
+          while IFS= read -r file; do
+            if [[ -f "$file" ]]; then
+              basename=$(basename "$file")
+              echo "🔎 Verificando: $file"
+
+              if [[ ! $basename =~ ^R__ ]]; then
+                echo "::error file=$file::❌ $basename - Não segue o padrão R__"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ $basename - OK"
+              fi
             fi
-          done
+          done < <(find sql/repeatable -type f -name "*.sql" 2>/dev/null)
+
+          if [ $error_count -gt 0 ]; then
+            echo "❌ Encontrados $error_count arquivo(s) com erro de nomenclatura:"
+            echo -e "$error_files"
+            exit 1
+          fi
+
+          echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
           echo "::endgroup::"
 
   approval:

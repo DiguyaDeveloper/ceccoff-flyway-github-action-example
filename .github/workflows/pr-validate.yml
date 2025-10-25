@@ -59,24 +59,36 @@ jobs:
         if: steps.changed-files.outputs.files != ''
         run: |
           echo "::group::Validação de Nomenclatura"
+
+          error_count=0
+          error_files=""
+
           while IFS= read -r file; do
             if [[ -f "$file" ]]; then
-              echo "🔍 Verificando $file"
               basename=$(basename "$file")
+              echo "🔎 Verificando: $file"
 
               if [[ $file == sql/repeatable/* ]] && [[ ! $basename =~ ^R__ ]]; then
-                echo "::error file=$file::Arquivo não segue o padrão R__"
-                exit 1
+                echo "::error file=$file::❌ $basename - Não segue o padrão R__"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              elif [[ $file =~ sql/(ddl|dml)/* ]] && [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
+                echo "::error file=$file::❌ $basename - Não segue o padrão V{YYYYMMDDHHMMSS}__"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ $basename - OK"
               fi
-
-              if [[ $file =~ sql/(ddl|dml)/* ]] && [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
-                echo "::error file=$file::Arquivo não segue o padrão V{YYYYMMDDHHMMSS}__"
-                exit 1
-              fi
-
-              echo "✅ $file: nomenclatura válida"
             fi
           done <<< "${{ steps.changed-files.outputs.files }}"
+
+          if [ $error_count -gt 0 ]; then
+            echo "❌ Encontrados $error_count arquivo(s) com erro de nomenclatura:"
+            echo -e "$error_files"
+            exit 1
+          fi
+
+          echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
           echo "::endgroup::"
 
       - name: 📊 Resumo
