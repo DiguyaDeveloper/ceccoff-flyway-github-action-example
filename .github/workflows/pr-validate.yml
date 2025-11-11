@@ -84,7 +84,7 @@ jobs:
       - name: 🔧 Instalar SQLFluff
         if: steps.changed-files.outputs.files != ''
         run: |
-          pip install sqlfluff==2.3.5
+          pip install sqlfluff==2.3.5 --break-system-packages
 
       - name: 📝 Validar Sintaxe SQL
         run: |
@@ -125,3 +125,4 @@ jobs:
             echo "⏭️ Validação não necessária: Nenhum arquivo SQL alterado"
           else
             echo "✅ Validação concluída com sucesso"
+          fi
