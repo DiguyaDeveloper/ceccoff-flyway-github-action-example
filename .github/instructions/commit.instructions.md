@@ -1,120 +1,145 @@
-# Instruções Globais para Geração de Mensagens de Commit
+# Global Instructions for Auto-Generating Conventional Commit Messages
+# (Prompts in English — Output in Brazilian Portuguese)
 
-Sempre que o usuário solicitar ajuda para escrever uma mensagem de commit, ou quando você identificar que ele está criando um commit, siga as regras abaixo.
-
----
-
-# 🧠 1. Sempre usar Conventional Commits
-
-A estrutura obrigatória é:
-
-**`<tipo>(escopo opcional): <descrição curta e imperativa>`**
-
-Exemplos:
-
-- `feat: adicionar endpoint de criação de usuários`
-- `fix: corrigir cálculo de juros`
-- `refactor(core): simplificar lógica de validação`
-- `docs(readme): atualizar seção de instalação`
-- `test: adicionar testes unitários para serviço X`
-- `chore: atualizar dependências`
+These instructions apply globally to the workspace.  
+Whenever the user requests a commit message, or when generating commit messages as part of a workflow, follow the rules below.
 
 ---
 
-# 🏷️ 2. Tipos aceitos
+## 1. Purpose
+Your goal is to create high-quality commit messages that follow the Conventional Commits specification, written entirely in Brazilian Portuguese, concise, clear, and based strictly on the actual diff.
 
-Use apenas os tipos oficiais:
-
-- feat
-- fix
-- refactor
-- perf
-- docs
-- style
-- test
-- build
-- chore
-- revert
-- ci
+Prompts are written in English to optimize reasoning, but output must always be Portuguese unless explicitly requested otherwise.
 
 ---
 
-# ✍️ 3. Regras para a descrição
+## 2. Commit Format (required)
 
-A descrição deve:
+<type>(optional-scope): <short imperative description in Portuguese>
 
-- ser escrita em português brasileiro  
-- ser curta e objetiva  
-- começar com verbo no imperativo
+(optional body explaining context, motivation, solution, impacts)
 
-Exemplos válidos:
+(optional footer for BREAKING CHANGES or issue references)
 
-- `fix: corrigir validação de CPF`
-- `refactor(core): reorganizar módulo de autenticação`
+Allowed types:
+feat, fix, refactor, docs, style, test, perf, build, ci, chore, revert
 
 ---
 
-# 📝 4. Corpo opcional do commit
+## 3. Choosing the Correct Type
 
-Quando necessário, incluir:
+feat → new feature or behavior  
+fix → correcting incorrect behavior  
+refactor → internal structural changes without behavior changes  
+docs → documentation updates  
+test → new or modified tests  
+style → formatting only  
+perf → performance improvements  
+build/ci → pipeline or build configs  
+chore → maintenance tasks  
+revert → revert previous commit  
 
-contexto, motivo, solução e impactos
+---
 
-Formato sugerido:
+## 4. Commit Description Rules
 
-```
-contexto: ...
-motivo: ...
-solução: ...
+Description must be:
+
+- in Brazilian Portuguese  
+- short and objective  
+- in imperative form  
+- max ~70 characters when possible  
+- derived strictly from the diff  
+
+Examples:
+fix: corrigir validação de CPF  
+feat: adicionar cálculo de tarifa  
+refactor(core): reorganizar lógica de autenticação  
+
+---
+
+## 5. Commit Body (optional)
+
+Use only when needed.
+
+contexto: ...  
+motivo: ...  
+solução: ...  
 impactos: ...
-```
+
+Must be concise and technical.
 
 ---
 
-# 🔁 5. BREAKING CHANGE
+## 6. BREAKING CHANGES
 
-Quando a mudança quebrar compatibilidade:
+If the change breaks compatibility:
 
-```
 BREAKING CHANGE: descrição do impacto e instruções de migração
-```
+
+And reflect breaking change in the title:
+feat!: alterar contrato de autenticação
 
 ---
 
-# 🧪 6. Basear commits no diff real
+## 7. Diff-Based Generation
 
-- Nunca invente mudanças  
-- Não inclua arquivos não alterados  
-- Não gere commits genéricos  
-
----
-
-# 🚫 7. Proibições
-
-- Nada de “ajustes”, “update”, “fix stuff”  
-- Não misture assuntos diferentes  
+- Inspect diff before generating  
+- Do not invent changes  
+- Do not include untouched files  
+- Accuracy over verbosity  
 
 ---
 
-# 📌 8. Idioma
+## 8. Forbidden Behavior
 
-Sempre escrever em **português brasileiro**, a menos que solicitado.
-
----
-
-# ✨ 9. Quando o usuário pedir “gere mensagem de commit”
-
-Você deve:
-
-1. Ler o diff  
-2. Determinar o tipo correto  
-3. Gerar commit claro, conciso e profissional  
-4. Seguir todas as regras acima  
+- Do not write commits in English (unless requested)  
+- Do not use vague descriptions like "ajustes" or "update"  
+- Do not mix unrelated changes  
+- Do not create overly long messages  
 
 ---
 
-# 🔒 10. Estilo geral
+## 9. When user says “generate commit message”
 
-- Objetivo  
-- Técnico  
-- Sem ruído  
+Steps:
+
+1. Review diff  
+2. Determine correct type  
+3. Generate professional commit message in Portuguese  
+4. Follow Conventional Commits strictly  
+
+Output example:
+
+feat(api): adicionar suporte para atualização de perfis
+
+contexto: a API não permitia atualizar dados parciais de perfil  
+solução: adicionar novo endpoint PATCH /perfil/{id}  
+impactos: exige atualização no cliente mobile  
+
+---
+
+## 10. Language Rules
+
+- Instructions/prompts: English  
+- Output: Brazilian Portuguese  
+
+---
+
+## 11. Git Workflow Integration
+
+If user wants full command:
+
+git commit -m "<title>" -m "<body>"
+
+But do NOT run commands unless explicitly requested.
+
+---
+
+## 12. Style
+
+Professional  
+Succinct  
+Technical  
+Accurate  
+Best practices aligned  
