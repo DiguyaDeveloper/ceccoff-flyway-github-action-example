@@ -25,9 +25,6 @@ on:
 
 env:
   FLYWAY_VERSION: 10.18.2
-  FLYWAY_SCHEMAS: scheduler
-  FLYWAY_DEFAULT_SCHEMA: scheduler
-  FLYWAY_LOCATIONS: filesystem:/flyway/sql/ddl,filesystem:/flyway/sql/repeatable
 
 jobs:
   validate_local:
@@ -143,9 +140,9 @@ jobs:
         if: inputs.approved != 'true'
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             info
 
@@ -155,17 +152,18 @@ jobs:
           set -e
           echo "Baixando Flyway CLI ${FLYWAY_VERSION}..."
           curl -fsSL "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz" -o flyway.tgz
-          tar xzf flyway.tgz
-          FLYWAY_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/")
-          ./"${FLYWAY_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" info
+          TMP_DIR=$(mktemp -d)
+          tar xzf flyway.tgz -C "$TMP_DIR" --strip-components=1
+          echo "TMP_FLYWAY_DIR=$TMP_DIR" >> $GITHUB_ENV
+          "$TMP_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" info
 
       - name: 🔍 Dry-Run (Validate)
         if: inputs.command == 'migrate' && inputs.approved != 'true'
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             validate
 
@@ -173,17 +171,16 @@ jobs:
         if: inputs.command == 'migrate' && inputs.approved == 'true'
         run: |
           set -e
-          FLYWAY_CLI_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/")
-          ./"${FLYWAY_CLI_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" validate
+          "$TMP_FLYWAY_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" validate
 
       - name: ⚡ Executar Flyway
         id: migrate
         if: inputs.approved != 'true'
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             ${{ inputs.command || 'migrate' }}
 
@@ -192,16 +189,15 @@ jobs:
         id: migrate_cli
         run: |
           set -e
-          FLYWAY_CLI_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/")
-          ./"${FLYWAY_CLI_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" ${{ inputs.command || 'migrate' }}
+          "$TMP_FLYWAY_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" ${{ inputs.command || 'migrate' }}
 
       - name: 📈 Info Pós-Migração
         if: always() && inputs.approved != 'true'
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             info
 
@@ -209,7 +205,7 @@ jobs:
         if: always() && inputs.approved == 'true'
         run: |
           set -e || true
-          FLYWAY_CLI_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/") || true
-          if [ -x "./${FLYWAY_CLI_DIR}/flyway" ]; then
-            ./"${FLYWAY_CLI_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" info || true
+          if [ -n "${TMP_FLYWAY_DIR:-}" ] && [ -x "${TMP_FLYWAY_DIR}/flyway" ]; then
+            "${TMP_FLYWAY_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" info || true
+            rm -rf "${TMP_FLYWAY_DIR}" || true
           fi

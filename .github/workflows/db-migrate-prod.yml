@@ -21,9 +21,6 @@ on:
 
 env:
   FLYWAY_VERSION: 10.18.2
-  FLYWAY_SCHEMAS: scheduler
-  FLYWAY_DEFAULT_SCHEMA: scheduler
-  FLYWAY_LOCATIONS: filesystem:/flyway/sql/ddl,filesystem:/flyway/sql/repeatable
 
 jobs:
   validate_prod:
@@ -131,9 +128,9 @@ jobs:
       - name: 📊 Info Pré-Migração
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             info
 
@@ -141,9 +138,9 @@ jobs:
         if: inputs.command == 'migrate'
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             validate
 
@@ -151,9 +148,9 @@ jobs:
         id: migrate
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             ${{ inputs.command || 'migrate' }}
 
@@ -161,9 +158,9 @@ jobs:
         if: always()
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             info
 
