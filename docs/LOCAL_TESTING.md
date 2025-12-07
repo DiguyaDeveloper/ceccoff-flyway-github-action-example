@@ -5,7 +5,7 @@ Este guia descreve os passos mínimos para testar o workflow local de migração
 ## Pré-requisitos
 - Docker Desktop (Windows) ou Docker Engine instalado e rodando
 - Git Bash (ou WSL) no Windows, ou um shell compatível com Bash
-- `docker-compose` (no repositório existe `docker-to-tests/docker-compose.yml`)
+- `docker-compose` (no repositório existe `docker/docker-compose.yml`)
 - `act` (ferramenta para rodar GitHub Actions localmente)
 
 ## Instalar o `act`
@@ -30,12 +30,12 @@ Observação: escolha a forma que preferir. Depois de instalado, confirme com `a
 
 ## 1) Iniciar o Postgres de teste
 
-O repositório contém um `docker-compose` de testes em `docker-to-tests/docker-compose.yml`.
+O repositório contém um `docker-compose` de testes em `docker/docker-compose.yml`.
 
 No diretório raiz do repositório rode:
 
 ```bash
-docker-compose -f docker-to-tests/docker-compose.yml up -d
+docker-compose -f docker/docker-compose.yml up -d
 
 # confirmar
 docker ps | grep local-postgres
@@ -99,7 +99,7 @@ docker run --rm -v "$(pwd -W)/sql:/flyway/sql" \
 Existe um helper no repositório que automatiza os passos acima: `./scripts/run-local-tests.sh`.
 
 O script realiza, em sequência:
-- Sobe o `docker-compose` de testes (`docker-to-tests/docker-compose.yml`)
+- Sobe o `docker-compose` de testes (`docker/docker-compose.yml`)
 - Aguarda o Postgres estar pronto (usa `pg_isready`)
 - Executa o workflow local via `act` em modo simulado (`approved=true`)
 - Lista as tabelas do schema `scheduler` para verificação rápida
@@ -113,7 +113,7 @@ Uso rápido:
 Para desmontar o ambiente após os testes:
 
 ```bash
-docker-compose -f docker-to-tests/docker-compose.yml down -v
+docker-compose -f docker/docker-compose.yml down -v
 ```
 
 
