@@ -23,8 +23,6 @@ on:
         type: choice
         options: [true, false]
 
-env:
-  FLYWAY_VERSION: 10.18.2
 
 jobs:
   validate_local:
@@ -32,6 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
 
       - name: 🔍 Verificar Estrutura
         run: |
@@ -101,6 +107,29 @@ jobs:
           echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
           echo "::endgroup::"
 
+      - name: 📊 Flyway - Info pré-validação (local)
+        if: inputs.approved != 'true'
+        run: |
+          # Info para inspecionar o estado atual do banco antes da validação
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            info
+
+      - name: 🔍 Flyway - Validate (local)
+        if: inputs.approved != 'true'
+        run: |
+          set -e
+          # Validar scripts com Flyway antes de permitir a migração local via Docker
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            validate
+
   approval_local:
     name: ✋ Aprovação Manual (local)
     needs: validate_local
@@ -128,6 +157,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
       - name: Configurar Variáveis
         run: |
           # Use secrets when disponíveis (CI). Para execução local com `act`,
@@ -135,16 +172,6 @@ jobs:
           echo "FLYWAY_URL=jdbc:postgresql://host.docker.internal:5432/appdb" >> $GITHUB_ENV
           echo "FLYWAY_USER=app" >> $GITHUB_ENV
           echo "FLYWAY_PASSWORD=app" >> $GITHUB_ENV
-
-      - name: 📊 Info Pré-Migração
-        if: inputs.approved != 'true'
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            info
 
       - name: 📊 Info Pré-Migração (CLI local)
         if: inputs.approved == 'true'
@@ -156,16 +183,6 @@ jobs:
           tar xzf flyway.tgz -C "$TMP_DIR" --strip-components=1
           echo "TMP_FLYWAY_DIR=$TMP_DIR" >> $GITHUB_ENV
           "$TMP_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" info
-
-      - name: 🔍 Dry-Run (Validate)
-        if: inputs.command == 'migrate' && inputs.approved != 'true'
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            validate
 
       - name: 🔍 Dry-Run (Validate CLI local)
         if: inputs.command == 'migrate' && inputs.approved == 'true'

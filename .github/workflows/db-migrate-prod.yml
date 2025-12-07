@@ -19,8 +19,6 @@ on:
         type: choice
         options: [info, validate, migrate, repair]
 
-env:
-  FLYWAY_VERSION: 10.18.2
 
 jobs:
   validate_prod:
@@ -28,6 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
 
       - name: 🔍 Verificar Estrutura
         run: |
@@ -97,6 +103,28 @@ jobs:
           echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
           echo "::endgroup::"
 
+      - name: 📊 Flyway - Info pré-validação
+        # Executa um "info" para listar migrations presentes no banco antes da validação.
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            info
+
+      - name: 🔍 Flyway - Validate (pré-aplicação)
+        # Esta etapa garante que Flyway valide os scripts (checks de consistência) antes de permitir a
+        # execução da migração no job de deploy. Se falhar, interrompe a pipeline.
+        run: |
+          set -e
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            validate
+
   approval_prod:
     name: ✋ Aprovação Manual (prod)
     needs: validate_prod
@@ -119,30 +147,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
       - name: Configurar Variáveis
         run: |
           echo "FLYWAY_URL=${{ secrets.DB_URL }}" >> $GITHUB_ENV
           echo "FLYWAY_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
           echo "FLYWAY_PASSWORD=${{ secrets.DB_PASS }}" >> $GITHUB_ENV
-
-      - name: 📊 Info Pré-Migração
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            info
-
-      - name: 🔍 Dry-Run (Validate)
-        if: inputs.command == 'migrate'
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            validate
 
       - name: ⚡ Executar Flyway
         id: migrate
