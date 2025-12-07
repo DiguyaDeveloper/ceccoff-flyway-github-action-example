@@ -1,4 +1,4 @@
-name: 🗄️ Database Migration Workflow
+name: 🗄️ Database Migration Workflow (dev/hml/prod)
 
 on:
   push:
@@ -25,8 +25,8 @@ env:
   FLYWAY_DEFAULT_SCHEMA: scheduler
 
 jobs:
-  validate:
-    name: 🔍 Validação de Scripts
+  validate_prod:
+    name: 🔍 Validação de Scripts (prod)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
 
       - name: 📝 Validar Sintaxe SQL com sqlfluff
         run: |
-          pip install sqlfluff
+          pip install sqlfluff --break-system-packages
           echo "::group::Validação de Scripts SQL"
           find sql -type f -name "*.sql" -exec sqlfluff lint {} \;
           echo "::endgroup::"
@@ -99,18 +99,17 @@ jobs:
           echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
           echo "::endgroup::"
 
-  approval:
-    name: ✋ Aprovação Manual
-    needs: validate
+  approval_prod:
+    name: ✋ Aprovação Manual (prod)
+    needs: validate_prod
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
     if: inputs.environment != 'dev'
     steps:
       - run: echo "✅ Migração aprovada para ${{ inputs.environment }}"
-
-  migrate:
-    name: 🚀 Execução da Migração
-    needs: [validate, approval]
+  migrate_prod:
+    name: 🚀 Execução da Migração (prod)
+    needs: [validate_prod, approval_prod]
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
     timeout-minutes: 30
