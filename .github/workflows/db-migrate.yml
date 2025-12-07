@@ -44,17 +44,11 @@ jobs:
             fi
           done
 
-      - name: 📝 Validar Sintaxe SQL
+      - name: 📝 Validar Sintaxe SQL com sqlfluff
         run: |
+          pip install sqlfluff
           echo "::group::Validação de Scripts SQL"
-          find sql -type f -name "*.sql" -print0 | while IFS= read -r -d '' file; do
-            echo "🔎 Analisando $file"
-            # Aqui iremos apenas verificar se o arquivo existe e é legível
-            if [ ! -r "$file" ]; then
-              echo "::error file=$file::Arquivo não pode ser lido"
-              exit 1
-            fi
-          done
+          find sql -type f -name "*.sql" -exec sqlfluff lint {} \;
           echo "::endgroup::"
 
       - name: 🔍 Validar Nomenclatura
@@ -119,6 +113,7 @@ jobs:
     needs: [validate, approval]
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
+    timeout-minutes: 30
 
     concurrency:
       group: flyway-${{ inputs.environment || 'dev' }}
@@ -141,6 +136,16 @@ jobs:
             -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA \
             flyway/flyway:${{ env.FLYWAY_VERSION }} \
             info
+
+      - name: 🔍 Dry-Run (Validate)
+        if: inputs.command == 'migrate'
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            validate
 
       - name: ⚡ Executar Flyway
         id: migrate
