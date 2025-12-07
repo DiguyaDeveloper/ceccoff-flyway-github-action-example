@@ -1,4 +1,4 @@
-CREATE TABLE test_invalid (
+CREATE TABLE FIRST_TABLE (
     id INT PRIMARY KEY,
     name VARCHAR(50)
 );
