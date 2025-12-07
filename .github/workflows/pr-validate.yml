@@ -6,6 +6,9 @@ on:
     paths: [ "sql/**" ]
   workflow_dispatch:
 
+env:
+  SQL_DIALECT: postgres
+
 jobs:
   validate-changes:
     name: 📝 Validar Alterações SQL
@@ -86,6 +89,37 @@ jobs:
         run: |
           pip install sqlfluff==2.3.5 --break-system-packages
 
+      - name: 📝 Validar Comentários
+        run: |
+          echo "::group::Validação de Comentários"
+          FILES="${{ steps.changed-files.outputs.files }}"
+
+          if [ -z "$FILES" ]; then
+            echo "⏭️ Skip: Nenhum arquivo SQL para validar"
+            exit 0
+          fi
+
+          error_count=0
+          error_files=""
+
+          echo "$FILES" | while read -r file; do
+            echo "🔎 Verificando comentários: $file"
+            if ! head -1 "$file" | grep -q "^--"; then
+              echo "::error file=$file::❌ Arquivo deve começar com comentário (-- Descrição)"
+              error_count=$((error_count + 1))
+              error_files="$error_files\n- $file"
+            else
+              echo "✅ Comentário presente: $file"
+            fi
+          done
+
+          if [ $error_count -gt 0 ]; then
+            echo "❌ $error_count arquivo(s) sem comentário inicial:"
+            echo -e "$error_files"
+            exit 1
+          fi
+          echo "::endgroup::"
+
       - name: 📝 Validar Sintaxe SQL
         run: |
           echo "::group::Validação de Sintaxe SQL"
@@ -101,7 +135,7 @@ jobs:
 
           echo "$FILES" | while read -r file; do
             echo "🔎 Analisando: $file"
-            if ! sqlfluff lint "$file" --dialect postgres; then
+            if ! sqlfluff lint "$file" --dialect ${{ env.SQL_DIALECT }}; then
               echo "::error file=$file::❌ Erro de sintaxe SQL"
               error_count=$((error_count + 1))
               error_files="$error_files\n- $file"
@@ -115,6 +149,18 @@ jobs:
             echo -e "$error_files"
             exit 1
           fi
+          echo "::endgroup::"
+
+      - name: 🔄 Formatar SQL
+        if: github.event_name == 'pull_request' && steps.changed-files.outputs.files != ''
+        run: |
+          echo "::group::Formatação Automática SQL"
+          FILES="${{ steps.changed-files.outputs.files }}"
+
+          echo "$FILES" | while read -r file; do
+            echo "🔄 Formatando: $file"
+            sqlfluff fix "$file" --dialect ${{ env.SQL_DIALECT }} --force
+          done
           echo "::endgroup::"
 
       - name: 📊 Resumo
