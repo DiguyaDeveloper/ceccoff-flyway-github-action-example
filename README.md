@@ -1,6 +1,6 @@
-# Database Migration Project 🗄️
+# Database Migration Project with Flyway and GitHub Actions 🗄️
 
-> Gerenciamento de migrações de banco de dados usando Flyway
+> Gerenciamento de migrações de banco de dados usando Flyway, com execuções automáticas e manuais via GitHub Actions
 
 ## 📁 Estrutura do Projeto
 
