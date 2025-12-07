@@ -42,7 +42,7 @@ When helping write commit messages, **always follow Conventional Commits**:
 When the user asks you to generate a commit message:
 - Summarize the main change in one short sentence.
 - Use English by default for commit messages.
-- Avoid generic messages like "update scripts" or "fix bugs".
+- Avoid generic messages like "update code" or "fix bugs".
 
 ## Code review style
 
@@ -58,6 +58,7 @@ When reviewing or suggesting changes:
 - **File naming pattern**: Versioned migrations use `V{YYYYMMDDHHMMSS}__{description}.sql` (e.g., `V20240131123411__create_table.sql`); repeatable migrations use `R__{description}.sql` (e.g., `R__update_view.sql`).
 - **Migration naming**: Use `V{YYYYMMDDHHMMSS}__{description}.sql` for versioned scripts; `R__{description}.sql` for repeatable.
 - **Script structure**: Start with comments explaining purpose; end with validation queries if needed.
+- **Documentation**: When creating or altering tables/columns, add database comments using `COMMENT ON TABLE table_name IS 'description';` or `COMMENT ON COLUMN table_name.column_name IS 'description';` for clarity and maintenance.
 - **GitHub Actions integration**: Suggest workflows that run `flyway migrate` in staging/prod, with pre-checks for conflicts.
 - **Error handling**: Always include checks for existing objects (e.g., `IF NOT EXISTS` in DDL).
 - **Examples**: When generating SQL, provide complete scripts with placeholders (e.g., `${schema}` for environment-specific values).
