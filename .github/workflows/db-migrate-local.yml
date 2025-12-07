@@ -1,0 +1,215 @@
+name: 🗄️ Database Migration Workflow (local)
+
+on:
+  # Este workflow local destina-se a testes com `act` e não deve rodar em pushes.
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '🌍 Selecione o Ambiente'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, hml, prod]
+      command:
+        description: '⚡ Comando Flyway'
+        required: true
+        default: 'migrate'
+        type: choice
+        options: [info, validate, migrate, repair]
+      approved:
+        description: '✅ Simular aprovação manual (usado com act)'
+        required: false
+        default: 'false'
+        type: choice
+        options: [true, false]
+
+env:
+  FLYWAY_VERSION: 10.18.2
+  FLYWAY_SCHEMAS: scheduler
+  FLYWAY_DEFAULT_SCHEMA: scheduler
+  FLYWAY_LOCATIONS: filesystem:/flyway/sql/ddl,filesystem:/flyway/sql/repeatable
+
+jobs:
+  validate_local:
+    name: 🔍 Validação de Scripts (local)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔍 Verificar Estrutura
+        run: |
+          if [ ! -d "sql" ]; then
+            echo "::error::Diretório sql/ não encontrado"
+            exit 1
+          fi
+
+          for dir in ddl dml repeatable; do
+            if [ ! -d "sql/$dir" ]; then
+              echo "::warning::Diretório sql/$dir não encontrado"
+            fi
+          done
+
+      - name: 📝 Validar Sintaxe SQL com sqlfluff
+        run: |
+          pip install sqlfluff --break-system-packages
+          echo "::group::Validação de Scripts SQL"
+          find sql -type f -name "*.sql" -exec sqlfluff lint {} \;
+          echo "::endgroup::"
+
+      - name: 🔍 Validar Nomenclatura
+        run: |
+          echo "::group::Validação de Nomenclatura"
+
+          error_count=0
+          error_files=""
+
+          # Validar scripts versionados
+          while IFS= read -r file; do
+            if [[ -f "$file" ]]; then
+              basename=$(basename "$file")
+              echo "🔎 Verificando: $file"
+
+              if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
+                echo "::error file=$file::❌ $basename - Não segue o padrão V{YYYYMMDDHHMMSS}__"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ $basename - OK"
+              fi
+            fi
+          done < <(find sql/ddl sql/dml -type f -name "*.sql" 2>/dev/null)
+
+          # Validar scripts repetíveis
+          while IFS= read -r file; do
+            if [[ -f "$file" ]]; then
+              basename=$(basename "$file")
+              echo "🔎 Verificando: $file"
+
+              if [[ ! $basename =~ ^R__ ]]; then
+                echo "::error file=$file::❌ $basename - Não segue o padrão R__"
+                error_count=$((error_count + 1))
+                error_files="$error_files\n- $file"
+              else
+                echo "✅ $basename - OK"
+              fi
+            fi
+          done < <(find sql/repeatable -type f -name "*.sql" 2>/dev/null)
+
+          if [ $error_count -gt 0 ]; then
+            echo "❌ Encontrados $error_count arquivo(s) com erro de nomenclatura:"
+            echo -e "$error_files"
+            exit 1
+          fi
+
+          echo "✅ Todos os arquivos seguem o padrão de nomenclatura"
+          echo "::endgroup::"
+
+  approval_local:
+    name: ✋ Aprovação Manual (local)
+    needs: validate_local
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    steps:
+      - name: Simular Aprovação (local)
+        run: |
+          if [ "${{ inputs.approved }}" = "true" ]; then
+            echo "✅ Simulação: Migração aprovada para ${{ inputs.environment }}"
+          else
+            echo "⚠️ Nenhuma simulação de aprovação fornecida. Continuando sem bloqueio para testes locais."
+          fi
+  migrate_local:
+    name: 🚀 Execução da Migração (local)
+    needs: [validate_local, approval_local]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    timeout-minutes: 30
+
+    concurrency:
+      group: flyway-${{ inputs.environment || 'dev' }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Variáveis
+        run: |
+          # Use secrets when disponíveis (CI). Para execução local com `act`,
+          # faz fallback para o Postgres em Docker Desktop (host.docker.internal).
+          echo "FLYWAY_URL=jdbc:postgresql://host.docker.internal:5432/appdb" >> $GITHUB_ENV
+          echo "FLYWAY_USER=app" >> $GITHUB_ENV
+          echo "FLYWAY_PASSWORD=app" >> $GITHUB_ENV
+
+      - name: 📊 Info Pré-Migração
+        if: inputs.approved != 'true'
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            info
+
+      - name: 📊 Info Pré-Migração (CLI local)
+        if: inputs.approved == 'true'
+        run: |
+          set -e
+          echo "Baixando Flyway CLI ${FLYWAY_VERSION}..."
+          curl -fsSL "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz" -o flyway.tgz
+          tar xzf flyway.tgz
+          FLYWAY_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/")
+          ./"${FLYWAY_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" info
+
+      - name: 🔍 Dry-Run (Validate)
+        if: inputs.command == 'migrate' && inputs.approved != 'true'
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            validate
+
+      - name: 🔍 Dry-Run (Validate CLI local)
+        if: inputs.command == 'migrate' && inputs.approved == 'true'
+        run: |
+          set -e
+          FLYWAY_CLI_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/")
+          ./"${FLYWAY_CLI_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" validate
+
+      - name: ⚡ Executar Flyway
+        id: migrate
+        if: inputs.approved != 'true'
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            ${{ inputs.command || 'migrate' }}
+
+      - name: ⚡ Executar Flyway (CLI local)
+        if: inputs.approved == 'true'
+        id: migrate_cli
+        run: |
+          set -e
+          FLYWAY_CLI_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/")
+          ./"${FLYWAY_CLI_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" ${{ inputs.command || 'migrate' }}
+
+      - name: 📈 Info Pós-Migração
+        if: always() && inputs.approved != 'true'
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/sql:/flyway/sql" \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            -e FLYWAY_SCHEMAS -e FLYWAY_DEFAULT_SCHEMA -e FLYWAY_LOCATIONS \
+            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            info
+
+      - name: 📈 Info Pós-Migração (CLI local)
+        if: always() && inputs.approved == 'true'
+        run: |
+          set -e || true
+          FLYWAY_CLI_DIR=$(tar -tf flyway.tgz | head -1 | cut -f1 -d"/") || true
+          if [ -x "./${FLYWAY_CLI_DIR}/flyway" ]; then
+            ./"${FLYWAY_CLI_DIR}"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" -locations="filesystem:sql/ddl,filesystem:sql/repeatable" info || true
+          fi
