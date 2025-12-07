@@ -4,12 +4,53 @@
 
 ## 📁 Estrutura do Projeto
 
-```doc
+```txt
+.
+├── .github/
+│   ├── chatmodes/
+│   │   └── GPT-Beast.agent.md
+│   │
+│   ├── copilot/
+│   │   └── instructions/
+│   │       ├── sql.instructions.md
+│   │       ├── copilot-instructions.md
+│   │       ├── commit.instructions.md
+│   │       └── pull_request.instructions.md
+│   │
+│   ├── pull_request_template.md
+│   │
+│   ├── scripts/
+│   │   └── notify.js
+│   │
+│   └── workflows/
+│       ├── db-migrate-local.yml
+│       ├── db-migrate-prod.yml
+│       ├── pr-validate.yml
+│       └── ci.yml (opcional)
+│
+├── .vscode/
+│   └── (configurações do VS Code)
+│
+├── docker/
+│   └── (arquivos de infraestrutura Docker)
+│
+├── docs/
+│   └── (documentações adicionais)
+│
+├── scripts/
+│   └── (scripts utilitários ou operacionais)
+│
 ├── sql/
-│   ├── ddl/         # Estrutura (CREATE, ALTER TABLE)
-│   ├── dml/         # Dados (INSERT, UPDATE, DELETE)
-│   └── repeatable/  # Views e Procedures
-└── .github/workflows/
+│   ├── ddl/
+│   ├── dml/
+│   └── repeatable/
+│   └── (scripts SQL e migrações)
+
+├── .flyway-version
+├── .sqlfluff
+├── flyway.conf
+│
+└── README.md
 ```
 
 ## 📝 Scripts SQL
