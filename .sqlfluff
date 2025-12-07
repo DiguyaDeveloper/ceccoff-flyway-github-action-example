@@ -1,7 +1,15 @@
 [sqlfluff]
 dialect = postgres
-exclude_rules = L014,L016
 max_line_length = 120
+indent_unit = space
+indent_size = 2
 
 [sqlfluff:rules]
-tab_space_size = 4
+# Regras específicas para Flyway
+exclude_rules = L034,L036
+
+[sqlfluff:rules:L010]  # Capitalização de keywords
+capitalisation_policy = upper
+
+[sqlfluff:rules:L014]  # Identificadores não-quoted
+extended_capitalisation_policy = lower
