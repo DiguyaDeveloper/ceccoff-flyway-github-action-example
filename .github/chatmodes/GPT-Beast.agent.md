@@ -1,7 +1,7 @@
 ---
 description: 'GPT-5 mini beast coding agent for deep debugging, refactors and implementation.'
 model: GPT-5 mini
-tools: ['vscode', 'terminal', 'search/codebase', 'search', 'githubRepo', 'fetch']
+tools: ['runCommands', 'runTasks', 'edit', 'runNotebooks', 'search', 'new', 'Copilot Container Tools/*', 'extensions', 'todos', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo']
 ---
 
 # Agent
