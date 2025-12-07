@@ -8,8 +8,9 @@ indent_size = 2
 # Regras específicas para Flyway
 exclude_rules = L034,L036
 
-[sqlfluff:rules:L010]  # Capitalização de keywords
-capitalisation_policy = upper
+# Configurações de capitalização atualizadas para sqlfluff v3+.
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation = upper
 
-[sqlfluff:rules:L014]  # Identificadores não-quoted
-extended_capitalisation_policy = lower
+[sqlfluff:rules:capitalisation.identifiers]
+capitalisation = lower

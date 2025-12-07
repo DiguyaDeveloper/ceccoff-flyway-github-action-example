@@ -110,20 +110,58 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            flyway/flyway:${FLYWAY_VERSION} \
             info
+
+      - name: 💡 Garantir schema 'scheduler' existe
+        # Se o banco foi resetado, criamos o schema alvo antes de rodar 'flyway validate'
+        run: |
+          set -e
+          DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
+          DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
+          docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+            psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -c "CREATE SCHEMA IF NOT EXISTS scheduler;"
 
       - name: 🔍 Flyway - Validate (pré-aplicação)
         # Esta etapa garante que Flyway valide os scripts (checks de consistência) antes de permitir a
         # execução da migração no job de deploy. Se falhar, interrompe a pipeline.
         run: |
           set -e
+          # Só executar validate se houver flyway_schema_history — evita falha em DB completamente novo
+          DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
+          DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
+          EXISTS=$(docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+            psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='scheduler' AND table_name='flyway_schema_history';" || true)
+          if [ "${EXISTS}" != "1" ]; then
+            echo "⚠️ flyway_schema_history não encontrada — pulando 'flyway validate' (banco novo)."
+          else
+            docker run --rm \
+              -v "${{ github.workspace }}:/workspace" \
+              -w /workspace \
+              -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+              flyway/flyway:${FLYWAY_VERSION} \
+              validate
+          fi
+
+      - name: 🧾 Flyway - Dry run (preview SQL) and upload artifact
+        if: always()
+        run: |
+          set -e
+          DRYFILE="flyway_dryrun_${{ inputs.environment }}_${{ github.run_id }}.sql"
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            validate
+            flyway/flyway:${FLYWAY_VERSION} \
+            migrate -dryRunOutput="$DRYFILE"
+          echo "Dry run escrito em $DRYFILE"
+
+      - name: 📦 Upload Flyway dry-run artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flyway-dryrun-${{ inputs.environment }}-${{ github.run_id }}
+          path: flyway_dryrun_${{ inputs.environment }}_${{ github.run_id }}.sql
 
   approval_prod:
     name: ✋ Aprovação Manual (prod)
@@ -168,7 +206,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            flyway/flyway:${FLYWAY_VERSION} \
             ${{ inputs.command || 'migrate' }}
 
       - name: 📈 Info Pós-Migração
@@ -178,7 +216,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            flyway/flyway:${FLYWAY_VERSION} \
             info
 
       - name: 📣 Notificar Status

@@ -115,20 +115,37 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            flyway/flyway:${FLYWAY_VERSION} \
             info
+
+      - name: 💡 Garantir schema 'scheduler' existe (local)
+        if: inputs.approved != 'true'
+        run: |
+          set -e
+          DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
+          DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
+          docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+            psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -c "CREATE SCHEMA IF NOT EXISTS scheduler;"
 
       - name: 🔍 Flyway - Validate (local)
         if: inputs.approved != 'true'
         run: |
           set -e
-          # Validar scripts com Flyway antes de permitir a migração local via Docker
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
-            validate
+          # Se não houver flyway_schema_history, pular a validação (banco novo)
+          DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
+          DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
+          EXISTS=$(docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+            psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='scheduler' AND table_name='flyway_schema_history';" || true)
+          if [ "${EXISTS}" != "1" ]; then
+            echo "⚠️ flyway_schema_history não encontrada — pulando 'flyway validate' (banco novo)."
+          else
+            docker run --rm \
+              -v "${{ github.workspace }}:/workspace" \
+              -w /workspace \
+              -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+              flyway/flyway:${FLYWAY_VERSION} \
+              validate
+          fi
 
   approval_local:
     name: ✋ Aprovação Manual (local)
@@ -184,11 +201,29 @@ jobs:
           echo "TMP_FLYWAY_DIR=$TMP_DIR" >> $GITHUB_ENV
           "$TMP_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" info
 
+      - name: 💡 Garantir schema 'scheduler' existe (CLI local)
+        if: inputs.approved == 'true'
+        run: |
+          set -e
+          DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
+          DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
+          docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+            psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -c "CREATE SCHEMA IF NOT EXISTS scheduler;"
+
       - name: 🔍 Dry-Run (Validate CLI local)
         if: inputs.command == 'migrate' && inputs.approved == 'true'
         run: |
           set -e
-          "$TMP_FLYWAY_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" validate
+          # Só validar se o histórico do Flyway já existir
+          DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
+          DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
+          EXISTS=$(docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+            psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='scheduler' AND table_name='flyway_schema_history';" || true)
+          if [ "${EXISTS}" != "1" ]; then
+            echo "⚠️ flyway_schema_history não encontrada — pulando 'flyway validate' (banco novo)."
+          else
+            "$TMP_FLYWAY_DIR"/flyway -url="${FLYWAY_URL}" -user="${FLYWAY_USER}" -password="${FLYWAY_PASSWORD}" validate
+          fi
 
       - name: ⚡ Executar Flyway
         id: migrate
@@ -198,7 +233,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            flyway/flyway:${FLYWAY_VERSION} \
             ${{ inputs.command || 'migrate' }}
 
       - name: ⚡ Executar Flyway (CLI local)
@@ -215,7 +250,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${{ env.FLYWAY_VERSION }} \
+            flyway/flyway:${FLYWAY_VERSION} \
             info
 
       - name: 📈 Info Pós-Migração (CLI local)
