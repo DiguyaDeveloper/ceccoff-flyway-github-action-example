@@ -1,7 +1,7 @@
 ---
 description: 'Professional PR auto-fill instructions for GitHub Copilot, aligned with Conventional Commits and a structured PR template. Prompts in English, PR content in Brazilian Portuguese.'
 tags: ['pr', 'pull-request', 'review', 'conventional-commits', 'standardization']
-appliesTo: ['**/*']
+applyTo: "**"
 ---
 
 # Global Instructions for Auto-Filling Pull Requests
