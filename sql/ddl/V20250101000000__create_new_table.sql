@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS new_table_example (
     id SERIAL PRIMARY KEY
 );
 
-COMMENT ON TABLE new_table_example IS
-'Tabela de exemplo criada como estrutura base para futuras operações e testes. '
-'Contém apenas a coluna id como placeholder, com colunas adicionais a serem '
-'definidas em migrations subsequentes.';
+COMMENT ON TABLE new_table_example IS $$
+Tabela de exemplo criada como estrutura base para futuras operações e testes.
+Contém apenas a coluna id como placeholder, com colunas adicionais a serem
+definidas em migrations subsequentes.
+$$;
