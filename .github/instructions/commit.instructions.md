@@ -1,3 +1,7 @@
+---
+applyTo: "**"
+---
+
 # Global Instructions for Auto-Generating Conventional Commit Messages
 # (Prompts in English — Output in Brazilian Portuguese)
 
