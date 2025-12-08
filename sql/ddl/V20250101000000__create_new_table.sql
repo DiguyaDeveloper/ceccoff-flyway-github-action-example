@@ -1,7 +1,7 @@
--- V20230101000000__create_schema_scheduler.sql
--- Cria o schema `scheduler` caso ainda não exista.
--- Esta migration foi adicionada para garantir que o schema alvo exista
--- antes das demais migrations aplicarem objetos.
+-- V20250101000000__create_new_table.sql
+-- Cria a tabela `new_table_example` caso ainda não exista.
+-- Esta migration adiciona a tabela de exemplo para futuras operações e testes.
+-- Garante que a estrutura básica esteja disponível antes de outras migrations que dependam desta tabela.
 
 CREATE TABLE IF NOT EXISTS new_table_example (
     id SERIAL PRIMARY KEY
