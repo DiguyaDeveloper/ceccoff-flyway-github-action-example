@@ -1,3 +1,8 @@
+---
+description: 'Professional PR auto-fill instructions for GitHub Copilot, aligned with Conventional Commits and a structured PR template. Prompts in English, PR content in Brazilian Portuguese.'
+applyTo: "**"
+---
+
 # Project instructions – Flyway Database Migrations
 
 You are helping in a database migration project built with:
