@@ -44,6 +44,13 @@ When the user asks you to generate a commit message:
 - Use English by default for commit messages.
 - Avoid generic messages like "update code" or "fix bugs".
 
+## Pull Request Summaries
+
+*   **Always** write the Pull Request summary in **Português do Brasil (pt-BR)**.
+*   Use short bullet points to describe the main changes.
+*   Include references to issues or tickets (e.g., `Closes #123`).
+*   Keep the language professional and direct.
+
 ## Code review style
 
 When reviewing or suggesting changes:
