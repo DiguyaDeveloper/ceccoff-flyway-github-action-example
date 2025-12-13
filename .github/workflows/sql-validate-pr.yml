@@ -1,10 +1,9 @@
-name: 🔍 SQL Validation
+name: 🔍 SQL Validate PR (sql/**)
 
 on:
   pull_request:
     branches: [ main ]
     paths: [ "sql/**" ]
-  workflow_dispatch:
 
 env:
   SQL_DIALECT: postgres

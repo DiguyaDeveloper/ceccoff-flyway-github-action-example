@@ -1,28 +1,42 @@
-name: 🗄️ Database Migration Workflow (dev/hml/prod)
+name: 🗄️ Flyway Migration (manual/local)
 
 on:
-  push:
-    branches: [ main ]
-    paths: [ "sql/**" ]
   workflow_dispatch:
     inputs:
       environment:
-        description: '🌍 Selecione o Ambiente'
+        description: '🌍 Ambiente (dev/hml/prod/local)'
         required: true
         default: 'dev'
         type: choice
-        options: [dev, hml, prod]
+        options: [local, dev, hml, prod]
       command:
         description: '⚡ Comando Flyway'
         required: true
         default: 'migrate'
         type: choice
         options: [info, validate, migrate, repair]
+      approved:
+        description: '✅ Auto-aprovar execuções locais (act). Ignore em dev/hml/prod (usar aprovação do ambiente).'
+        required: true
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      db_url:
+        description: '🔗 DB URL (opcional para modo local)'
+        required: false
+      db_user:
+        description: '👤 DB User (opcional para modo local)'
+        required: false
+      db_pass:
+        description: '🔒 DB Password (opcional para modo local)'
+        required: false
 
+env:
+  SQL_DIALECT: postgres
 
 jobs:
-  validate_prod:
-    name: 🔍 Validação de Scripts (prod)
+  validate:
+    name: 🔍 Validar Scripts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +47,31 @@ jobs:
             echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
           else
             echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
+      - name: Definir ambiente
+        run: echo "ENVIRONMENT=local" >> $GITHUB_ENV
+
+      - name: Definir credenciais para validação
+        run: |
+          if [ "$ENVIRONMENT" = "local" ]; then
+            if [ -z "${{ secrets.DB_URL }}" ] || [ -z "${{ secrets.DB_USER }}" ] || [ -z "${{ secrets.DB_PASS }}" ]; then
+              echo "::error::Defina os secrets DB_URL, DB_USER e DB_PASS para local."
+              exit 1
+            fi
+            echo "Usando secrets para local."
+            echo "FLYWAY_URL=${{ secrets.DB_URL }}" >> $GITHUB_ENV
+            echo "FLYWAY_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+            echo "FLYWAY_PASSWORD=${{ secrets.DB_PASS }}" >> $GITHUB_ENV
+          else
+            if [ -z "${{ secrets.DB_URL }}" ] || [ -z "${{ secrets.DB_USER }}" ] || [ -z "${{ secrets.DB_PASS }}" ]; then
+              echo "::error::Defina os secrets DB_URL, DB_USER e DB_PASS no ambiente/repo para validar em $ENVIRONMENT."
+              exit 1
+            fi
+            echo "Usando secrets configurados (repo/ambiente)."
+            echo "FLYWAY_URL=${{ secrets.DB_URL }}" >> $GITHUB_ENV
+            echo "FLYWAY_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+            echo "FLYWAY_PASSWORD=${{ secrets.DB_PASS }}" >> $GITHUB_ENV
           fi
 
       - name: 🔍 Verificar Estrutura
@@ -62,12 +101,11 @@ jobs:
           error_count=0
           error_files=""
 
-          # Validar scripts versionados
+          # Versionados
           while IFS= read -r file; do
             if [[ -f "$file" ]]; then
               basename=$(basename "$file")
               echo "🔎 Verificando: $file"
-
               if [[ ! $basename =~ ^V[0-9]{14}__ ]]; then
                 echo "::error file=$file::❌ $basename - Não segue o padrão V{YYYYMMDDHHMMSS}__"
                 error_count=$((error_count + 1))
@@ -78,12 +116,11 @@ jobs:
             fi
           done < <(find sql/ddl sql/dml -type f -name "*.sql" 2>/dev/null)
 
-          # Validar scripts repetíveis
+          # Repetíveis
           while IFS= read -r file; do
             if [[ -f "$file" ]]; then
               basename=$(basename "$file")
               echo "🔎 Verificando: $file"
-
               if [[ ! $basename =~ ^R__ ]]; then
                 echo "::error file=$file::❌ $basename - Não segue o padrão R__"
                 error_count=$((error_count + 1))
@@ -104,9 +141,8 @@ jobs:
           echo "::endgroup::"
 
       - name: 📊 Flyway - Info pré-validação
-        # Executa um "info" para listar migrations presentes no banco antes da validação.
         run: |
-          docker run --rm \
+          docker run --rm --network host \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
@@ -114,28 +150,24 @@ jobs:
             info
 
       - name: 💡 Garantir schema 'scheduler' existe
-        # Se o banco foi resetado, criamos o schema alvo antes de rodar 'flyway validate'
         run: |
           set -e
           DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
           DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
-          docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+          docker run --rm --network host -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
             psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -c "CREATE SCHEMA IF NOT EXISTS scheduler;"
 
-      - name: 🔍 Flyway - Validate (pré-aplicação)
-        # Esta etapa garante que Flyway valide os scripts (checks de consistência) antes de permitir a
-        # execução da migração no job de deploy. Se falhar, interrompe a pipeline.
+      - name: 🔍 Flyway - Validate
         run: |
           set -e
-          # Só executar validate se houver flyway_schema_history — evita falha em DB completamente novo
           DB_HOST=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://([^/:]+)(:[0-9]+)?/([^?]+).*|\1|')
           DB_NAME=$(echo "${FLYWAY_URL}" | sed -E 's|jdbc:postgresql://[^/]+/([^?]+).*|\1|')
-          EXISTS=$(docker run --rm -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
+          EXISTS=$(docker run --rm --network host -e PGPASSWORD="${FLYWAY_PASSWORD}" postgres:16 \
             psql -h "${DB_HOST}" -U "${FLYWAY_USER}" -d "${DB_NAME}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='scheduler' AND table_name='flyway_schema_history';" || true)
           if [ "${EXISTS}" != "1" ]; then
             echo "⚠️ flyway_schema_history não encontrada — pulando 'flyway validate' (banco novo)."
           else
-            docker run --rm \
+            docker run --rm --network host \
               -v "${{ github.workspace }}:/workspace" \
               -w /workspace \
               -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
@@ -143,45 +175,16 @@ jobs:
               validate
           fi
 
-      - name: 🧾 Flyway - Dry run (preview SQL) and upload artifact
-        if: always()
-        run: |
-          set -e
-          DRYFILE="flyway_dryrun_${{ inputs.environment }}_${{ github.run_id }}.sql"
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
-            flyway/flyway:${FLYWAY_VERSION} \
-            migrate -dryRunOutput="$DRYFILE"
-          echo "Dry run escrito em $DRYFILE"
-
-      - name: 📦 Upload Flyway dry-run artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flyway-dryrun-${{ inputs.environment }}-${{ github.run_id }}
-          path: flyway_dryrun_${{ inputs.environment }}_${{ github.run_id }}.sql
-
-  approval_prod:
-    name: ✋ Aprovação Manual (prod)
-    needs: validate_prod
+  migrate_remote:
+    name: 🚀 Executar Migração (ambiente)
+    if: inputs.environment != 'local'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'dev' }}
-    if: inputs.environment != 'dev'
-    steps:
-      - run: echo "✅ Migração aprovada para ${{ inputs.environment }}"
-  migrate_prod:
-    name: 🚀 Execução da Migração (prod)
-    needs: [validate_prod, approval_prod]
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'dev' }}
+    needs: [validate]
+    environment: ${{ inputs.environment }}
     timeout-minutes: 30
-
     concurrency:
-      group: flyway-${{ inputs.environment || 'dev' }}
+      group: flyway-${{ inputs.environment }}
       cancel-in-progress: false
-
     steps:
       - uses: actions/checkout@v4
 
@@ -193,8 +196,13 @@ jobs:
             echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
           fi
 
-      - name: Configurar Variáveis
+      - name: Definir credenciais (ambiente)
         run: |
+          if [ -z "${{ secrets.DB_URL }}" ] || [ -z "${{ secrets.DB_USER }}" ] || [ -z "${{ secrets.DB_PASS }}" ]; then
+            echo "::error::Defina os secrets do ambiente DB_URL, DB_USER e DB_PASS antes de migrar."
+            exit 1
+          fi
+          echo "Usando secrets do ambiente GitHub."
           echo "FLYWAY_URL=${{ secrets.DB_URL }}" >> $GITHUB_ENV
           echo "FLYWAY_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
           echo "FLYWAY_PASSWORD=${{ secrets.DB_PASS }}" >> $GITHUB_ENV
@@ -202,7 +210,7 @@ jobs:
       - name: ⚡ Executar Flyway
         id: migrate
         run: |
-          docker run --rm \
+          docker run --rm --network host \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
@@ -212,7 +220,7 @@ jobs:
       - name: 📈 Info Pós-Migração
         if: always()
         run: |
-          docker run --rm \
+          docker run --rm --network host \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
@@ -229,6 +237,64 @@ jobs:
               github,
               context,
               status: "${{ job.status }}",
-              environment: "${{ inputs.environment || 'dev' }}",
+              environment: "${{ inputs.environment }}",
               command: "${{ inputs.command || 'migrate' }}"
             });
+
+  migrate_local:
+    name: 🚀 Executar Migração (local)
+    if: inputs.environment == 'local'
+    runs-on: ubuntu-latest
+    needs: [validate]
+    timeout-minutes: 30
+    concurrency:
+      group: flyway-local
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checar flag approved para execuções locais
+        run: |
+          if [ "${{ inputs.approved }}" != "true" ]; then
+            echo "::error::Para executar local/act defina approved=true (simulação de aprovação)."
+            exit 1
+          fi
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
+      - name: Definir credenciais (local)
+        run: |
+          if [ -z "${{ inputs.db_url }}" ] || [ -z "${{ inputs.db_user }}" ] || [ -z "${{ inputs.db_pass }}" ]; then
+            echo "::error::Para environment=local, forneça db_url, db_user e db_pass via inputs."
+            exit 1
+          fi
+          echo "Usando credenciais fornecidas via inputs (local)."
+          echo "FLYWAY_URL=${{ inputs.db_url }}" >> $GITHUB_ENV
+          echo "FLYWAY_USER=${{ inputs.db_user }}" >> $GITHUB_ENV
+          echo "FLYWAY_PASSWORD=${{ inputs.db_pass }}" >> $GITHUB_ENV
+
+      - name: ⚡ Executar Flyway
+        id: migrate
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \Run Main Definir credenciais para validação
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            flyway/flyway:${FLYWAY_VERSION} \
+            ${{ inputs.command || 'migrate' }}
+
+      - name: 📈 Info Pós-Migração
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e FLYWAY_URL -e FLYWAY_USER -e FLYWAY_PASSWORD \
+            flyway/flyway:${FLYWAY_VERSION} \
+            info
