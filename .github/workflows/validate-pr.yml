@@ -1,0 +1,47 @@
+name: 🔍 Validate PR
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+env:
+  SQL_DIALECT: postgres
+
+jobs:
+  validate:
+    name: 🔍 Validar Scripts SQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
+      - name: 🔍 Verificar Estrutura
+        run: chmod +x .github/workflows/shared/flows/validate-structure.sh && ./.github/workflows/shared/flows/validate-structure.sh
+
+      - name: 📝 Validar Sintaxe SQL
+        run: chmod +x .github/workflows/shared/flows/validate-sql-syntax.sh && ./.github/workflows/shared/flows/validate-sql-syntax.sh
+
+      - name: 🔍 Validar Nomenclatura
+        run: chmod +x .github/workflows/shared/flows/validate-naming.sh && ./.github/workflows/shared/flows/validate-naming.sh
+
+      - name: 🔐 Configurar Credenciais (Test DB)
+        run: |
+          chmod +x .github/workflows/shared/flows/setup-credentials.sh
+          ./.github/workflows/shared/flows/setup-credentials.sh "test" "${{ secrets.DB_URL }}" "${{ secrets.DB_USER }}" "${{ secrets.DB_PASS }}"
+
+      - name: 📊 Flyway Info
+        run: chmod +x .github/workflows/shared/flows/flyway-info.sh && ./.github/workflows/shared/flows/flyway-info.sh $FLYWAY_VERSION
+
+      - name: 💡 Garantir Schema
+        run: chmod +x .github/workflows/validate-pr/flows/ensure-schema.sh && ./.github/workflows/validate-pr/flows/ensure-schema.sh
+
+      - name: 🔍 Flyway Validate
+        run: chmod +x .github/workflows/validate-pr/flows/flyway-validate.sh && ./.github/workflows/validate-pr/flows/flyway-validate.sh $FLYWAY_VERSION
