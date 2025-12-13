@@ -1,3 +1,8 @@
+---
+description: 'Professional PR auto-fill instructions for GitHub Copilot, aligned with Conventional Commits and a structured PR template. Prompts in English, PR content in Brazilian Portuguese.'
+applyTo: "**"
+---
+
 # Project instructions – Flyway Database Migrations
 
 You are helping in a database migration project built with:
@@ -43,6 +48,13 @@ When the user asks you to generate a commit message:
 - Summarize the main change in one short sentence.
 - Use English by default for commit messages.
 - Avoid generic messages like "update code" or "fix bugs".
+
+## Pull Request Summaries
+
+*   **Always** write the Pull Request summary in **Português do Brasil (pt-BR)**.
+*   Use short bullet points to describe the main changes.
+*   Include references to issues or tickets (e.g., `Closes #123`).
+*   Keep the language professional and direct.
 
 ## Code review style
 
