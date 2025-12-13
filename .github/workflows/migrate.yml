@@ -1,0 +1,145 @@
+name: 🗄️ Flyway Migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '🌍 Ambiente (dev/hml/prod/local)'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [local, dev, hml, prod]
+      command:
+        description: '⚡ Comando Flyway'
+        required: true
+        default: 'migrate'
+        type: choice
+        options: [info, validate, migrate, repair]
+      approved:
+        description: '✅ Auto-aprovar execuções locais (act). Ignore em dev/hml/prod.'
+        required: true
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      db_url:
+        description: '🔗 DB URL (opcional para modo local)'
+        required: false
+      db_user:
+        description: '👤 DB User (opcional para modo local)'
+        required: false
+      db_pass:
+        description: '🔒 DB Password (opcional para modo local)'
+        required: false
+
+env:
+  SQL_DIALECT: postgres
+
+jobs:
+  validate:
+    name: 🔍 Validar Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
+      - name: 🔍 Verificar Estrutura
+        run: chmod +x .github/workflows/shared/flows/validate-structure.sh && ./.github/workflows/shared/flows/validate-structure.sh
+
+      - name: 📝 Validar Sintaxe SQL
+        run: chmod +x .github/workflows/shared/flows/validate-sql-syntax.sh && ./.github/workflows/shared/flows/validate-sql-syntax.sh
+
+      - name: 🔍 Validar Nomenclatura
+        run: chmod +x .github/workflows/shared/flows/validate-naming.sh && ./.github/workflows/shared/flows/validate-naming.sh
+
+  migrate_remote:
+    name: 🚀 Executar Migração (Ambiente)
+    if: inputs.environment != 'local'
+    runs-on: ubuntu-latest
+    needs: [validate]
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    concurrency:
+      group: flyway-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
+      - name: 🔐 Configurar Credenciais
+        run: |
+          chmod +x .github/workflows/shared/flows/setup-credentials.sh
+          ./.github/workflows/shared/flows/setup-credentials.sh "${{ inputs.environment }}" "${{ secrets.DB_URL }}" "${{ secrets.DB_USER }}" "${{ secrets.DB_PASS }}"
+
+      - name: 🚀 Executar Flyway
+        run: chmod +x .github/workflows/migrate/flows/flyway-migrate.sh && ./.github/workflows/migrate/flows/flyway-migrate.sh $FLYWAY_VERSION ${{ inputs.command }}
+
+      - name: 📈 Info Pós-Migração
+        if: always()
+        run: chmod +x .github/workflows/shared/flows/flyway-info.sh && ./.github/workflows/shared/flows/flyway-info.sh $FLYWAY_VERSION
+
+      - name: 📣 Notificar Status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const notify = require('./.github/scripts/notify.js');
+            await notify({
+              github,
+              context,
+              status: "${{ job.status }}",
+              environment: "${{ inputs.environment }}",
+              command: "${{ inputs.command }}"
+            });
+
+  migrate_local:
+    name: 🚀 Executar Migração (Local)
+    if: inputs.environment == 'local' && inputs.approved == 'true'
+    runs-on: ubuntu-latest
+    needs: [validate]
+    timeout-minutes: 30
+    concurrency:
+      group: flyway-local
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checar Aprovação Local
+        run: |
+          if [ "${{ inputs.approved }}" != "true" ]; then
+            echo "::error::Para execuções locais, defina approved=true"
+            exit 1
+          fi
+
+      - name: Carregar Flyway version
+        run: |
+          if [ -f .flyway-version ]; then
+            echo "FLYWAY_VERSION=$(cat .flyway-version)" >> $GITHUB_ENV
+          else
+            echo "FLYWAY_VERSION=10.18.2" >> $GITHUB_ENV
+          fi
+
+      - name: 🔐 Configurar Credenciais
+        run: |
+          chmod +x .github/workflows/shared/flows/setup-credentials.sh
+          ./.github/workflows/shared/flows/setup-credentials.sh "local" "${{ inputs.db_url }}" "${{ inputs.db_user }}" "${{ inputs.db_pass }}"
+
+      - name: 🚀 Executar Flyway
+        run: chmod +x .github/workflows/migrate/flows/flyway-migrate.sh && ./.github/workflows/migrate/flows/flyway-migrate.sh $FLYWAY_VERSION ${{ inputs.command }}
+
+      - name: 📈 Info Pós-Migração
+        if: always()
+        run: chmod +x .github/workflows/shared/flows/flyway-info.sh && ./.github/workflows/shared/flows/flyway-info.sh $FLYWAY_VERSION
