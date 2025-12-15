@@ -58,6 +58,9 @@ jobs:
       - name: 🔍 Validar Nomenclatura
         run: chmod +x .github/workflows/shared/flows/validate-naming.sh && ./.github/workflows/shared/flows/validate-naming.sh
 
+      - name: 📊 Gerar Relatório
+        run: chmod +x .github/workflows/shared/flows/generate-table.sh && ./.github/workflows/shared/flows/generate-table.sh
+
   migrate_remote:
     name: 🚀 Executar Migração (Ambiente)
     if: inputs.environment != 'local'
@@ -143,3 +146,21 @@ jobs:
       - name: 📈 Info Pós-Migração
         if: always()
         run: chmod +x .github/workflows/shared/flows/flyway-info.sh && ./.github/workflows/shared/flows/flyway-info.sh $FLYWAY_VERSION
+
+      - name: 📊 Gerar Relatório de Migração
+        if: always()
+        run: |
+          chmod +x .github/workflows/shared/flows/generate-report.sh
+          ENVIRONMENT="${{ inputs.environment }}" ./.github/workflows/shared/flows/generate-report.sh
+
+      - name: 📋 Exibir Tabela Detalhada
+        if: always()
+        run: chmod +x .github/workflows/shared/flows/generate-table.sh && ENVIRONMENT="${{ inputs.environment }}" ./.github/workflows/shared/flows/generate-table.sh
+
+      - name: 📄 Publicar Relatório de Migração
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-report-${{ inputs.environment }}
+          path: validation-report.md
+          retention-days: 30

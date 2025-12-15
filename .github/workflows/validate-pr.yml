@@ -45,3 +45,80 @@ jobs:
 
       - name: 🔍 Flyway Validate
         run: chmod +x .github/workflows/validate-pr/flows/flyway-validate.sh && ./.github/workflows/validate-pr/flows/flyway-validate.sh $FLYWAY_VERSION
+
+      - name: 📊 Gerar Relatório de Validação
+        run: chmod +x .github/workflows/shared/flows/generate-report.sh && ./.github/workflows/shared/flows/generate-report.sh
+
+      - name: 📋 Exibir Tabela Detalhada
+        run: chmod +x .github/workflows/shared/flows/generate-table.sh && ./.github/workflows/shared/flows/generate-table.sh
+
+      - name: 📄 Publicar Relatório
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation-report.md
+          retention-days: 30
+
+      - name: 💬 Comentar Resultado no PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('validation-report.md', 'utf8');
+
+            // Gerar tabela resumida para comentário
+            const ddlCount = report.match(/DDL \| (\d+)/)?.[1] || '0';
+            const dmlCount = report.match(/DML \| (\d+)/)?.[1] || '0';
+            const repeatableCount = report.match(/Repeatable \| (\d+)/)?.[1] || '0';
+            const totalCount = report.match(/\*\*Total\*\* \| \*\*(\d+)\*\*/)?.[1] || '0';
+
+            const comment = `## ✅ Validação dos Scripts SQL
+
+### 📊 Resumo da Validação
+
+| Tipo | Quantidade | Status |
+|------|------------|--------|
+| DDL | ${ddlCount} | ✅ Validado |
+| DML | ${dmlCount} | ✅ Validado |
+| Repeatable | ${repeatableCount} | ✅ Validado |
+| **Total** | **${totalCount}** | ✅ **Aprovado** |
+
+### 🔍 Detalhes da Validação
+- ✅ Estrutura de diretórios verificada
+- ✅ Sintaxe SQL validada com sqlfluff
+- ✅ Nomenclatura dos arquivos OK
+- ✅ Schema 'scheduler' garantido
+- ✅ Flyway validate executado com sucesso
+
+**Relatório completo disponível nos artifacts desta execução.**
+
+*Executado em: ${new Date().toLocaleString('pt-BR')}*`;
+
+            // Buscar comentário existente
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes('## ✅ Validação dos Scripts SQL')
+            );
+
+            if (existingComment) {
+              // Atualizar comentário existente
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              // Criar novo comentário
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
