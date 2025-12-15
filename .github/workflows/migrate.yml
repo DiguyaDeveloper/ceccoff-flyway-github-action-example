@@ -59,6 +59,7 @@ jobs:
         run: chmod +x .github/workflows/shared/flows/validate-naming.sh && ./.github/workflows/shared/flows/validate-naming.sh
 
       - name: 📊 Gerar Relatório
+        if: always()
         run: chmod +x .github/workflows/shared/flows/generate-table.sh && ./.github/workflows/shared/flows/generate-table.sh
 
   migrate_remote:
@@ -164,3 +165,20 @@ jobs:
           name: migration-report-${{ inputs.environment }}
           path: validation-report.md
           retention-days: 30
+
+  report:
+    name: 📊 Gerar Relatório Final
+    if: always()
+    runs-on: ubuntu-latest
+    needs: [validate, migrate_remote, migrate_local]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 📊 Gerar Relatório Consolidado
+        run: |
+          # Executar script de relatório final com status dos jobs
+          chmod +x .github/workflows/shared/flows/generate-final-report.sh
+          VALIDATE_JOB_STATUS="${{ needs.validate.result }}" \
+          MIGRATE_REMOTE_JOB_STATUS="${{ needs.migrate_remote.result }}" \
+          MIGRATE_LOCAL_JOB_STATUS="${{ needs.migrate_local.result }}" \
+          ./.github/workflows/shared/flows/generate-final-report.sh
